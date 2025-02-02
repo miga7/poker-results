@@ -10,13 +10,26 @@ export const SHEET_RANGES = {
 };
 
 export async function getAuthClient() {
-  const credentialsPath = path.join(process.cwd(), 'google-credentials.json');
-  const auth = new google.auth.GoogleAuth({
-    scopes: SCOPES,
-    keyFile: credentialsPath
-  });
+  try {
+    // First try using environment variables
+    if (process.env.GOOGLE_CREDENTIALS) {
+      const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+      return new google.auth.GoogleAuth({
+        credentials,
+        scopes: SCOPES
+      });
+    }
 
-  return auth;
+    // Fallback to file-based credentials for local development
+    const credentialsPath = path.join(process.cwd(), 'google-credentials.json');
+    return new google.auth.GoogleAuth({
+      keyFile: credentialsPath,
+      scopes: SCOPES
+    });
+  } catch (error) {
+    console.error('Error initializing Google Auth:', error);
+    throw error;
+  }
 }
 
 export async function getSheetData(range: string) {
