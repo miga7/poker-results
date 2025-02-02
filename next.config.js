@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  reactStrictMode: true,
+  transpilePackages: ["@radix-ui/themes"],
+  optimizeFonts: true,
+  swcMinify: true,
   eslint: {
     ignoreDuringBuilds: true,
   },

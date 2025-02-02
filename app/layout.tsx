@@ -6,7 +6,11 @@ import { Toaster } from '@/components/ui/toaster'
 import { ThemeProvider } from '@/components/theme-provider'
 import { cn } from '@/lib/utils'
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ 
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-inter',
+})
 
 export const metadata: Metadata = {
   title: 'Poker Results',
@@ -19,7 +23,10 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className="light" suppressHydrationWarning>
+    <html lang="en" className={cn("light", inter.variable)} suppressHydrationWarning>
+      <head>
+        <link rel="preload" href={inter.url} as="font" crossOrigin="anonymous" />
+      </head>
       <body className={cn(
         "min-h-screen bg-background font-sans antialiased",
         inter.className
