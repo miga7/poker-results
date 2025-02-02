@@ -1,19 +1,24 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { google } from 'googleapis';
 import { schedule } from 'node-cron';
+import { getAuthClient, SHEET_RANGES } from '@/lib/sheets';
 
-// Initialize Google Sheets API
-const sheets = google.sheets('v4');
+// Declare variables in global scope to persist between requests
+declare global {
+  var _lastRefreshStats: RefreshStats | null;
+  var _refreshHistory: RefreshStats[];
+  var _previousData: any[][] | null;
+}
 
-// In-memory storage for refresh stats
-let lastRefreshStats: RefreshStats | null = null;
-let refreshHistory: RefreshStats[] = [];
-let previousData: any[][] | null = null;
+// Initialize global variables if they don't exist
+if (!global._lastRefreshStats) global._lastRefreshStats = null;
+if (!global._refreshHistory) global._refreshHistory = [];
+if (!global._previousData) global._previousData = null;
 
 interface RefreshStats {
   timestamp: number;
   totalRows: number;
-  newRows: number;
+  changedValues: number;
   updatedRows: number;
   isAutomatic: boolean;
 }
@@ -30,81 +35,96 @@ schedule('0 5 * * *', async () => {
 
 async function refreshSpreadsheetData(isAutomatic: boolean = false) {
   try {
-    const auth = new google.auth.GoogleAuth({
-      credentials: {
-        client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      },
-      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-    });
+    console.log('Starting data refresh...');
+    const auth = await getAuthClient();
+    const sheets = google.sheets({ version: 'v4', auth });
 
     const response = await sheets.spreadsheets.values.get({
-      auth,
-      spreadsheetId: process.env.SHEET_ID,
-      range: process.env.SHEET_RANGE || 'Sheet1!A:N',
+      spreadsheetId: '1zBBY-hOcMrurb-EoTFGKNxaZnPMLLdfCwjRLt9JLEaM',
+      range: SHEET_RANGES.TOTALS,
     });
 
     const newData = response.data.values || [];
+    console.log('Fetched data rows:', newData.length);
     
     // Calculate statistics
     const stats: RefreshStats = {
       timestamp: Date.now(),
       totalRows: newData.length,
-      newRows: 0,
+      changedValues: 0,
       updatedRows: 0,
       isAutomatic
     };
 
-    if (previousData) {
-      // Find game type rows (rows that don't start with a number and aren't empty)
-      const gameTypeRows = newData.filter((row, index) => {
+    if (global._previousData) {
+      console.log('Previous data exists, calculating changes...');
+      // Find value rows (rows that contain actual data)
+      const valueRows = newData.filter((row, index) => {
         if (!row[0]) return false;
         const firstCell = row[0].toString().trim();
-        return !firstCell.match(/^\d/) && firstCell !== '' && firstCell !== 'Game Type';
+        // Include rows that start with numbers (these are the value rows)
+        return firstCell.match(/^\d/) || firstCell === '';
       });
 
-      const previousGameTypeRows = previousData.filter((row, index) => {
+      const previousValueRows = global._previousData.filter((row, index) => {
         if (!row[0]) return false;
         const firstCell = row[0].toString().trim();
-        return !firstCell.match(/^\d/) && firstCell !== '' && firstCell !== 'Game Type';
+        return firstCell.match(/^\d/) || firstCell === '';
       });
 
-      // Count new game types
-      stats.newRows = gameTypeRows.filter(row => 
-        !previousGameTypeRows.some(prevRow => prevRow[0] === row[0])
-      ).length;
+      console.log('Value rows found:', valueRows.length);
+      console.log('Previous value rows:', previousValueRows.length);
 
-      // Count updated rows (same game type but different values)
-      stats.updatedRows = gameTypeRows.filter(row => {
-        const prevRow = previousGameTypeRows.find(prev => prev[0] === row[0]);
-        return prevRow && JSON.stringify(row) !== JSON.stringify(prevRow);
-      }).length;
+      // Count changed values and updated rows
+      let changedValues = 0;
+      let updatedRows = 0;
+
+      valueRows.forEach((row, rowIndex) => {
+        const prevRow = previousValueRows[rowIndex];
+        if (!prevRow) return;
+
+        let hasChangesInRow = false;
+        row.forEach((cell, cellIndex) => {
+          const prevCell = prevRow[cellIndex];
+          if (cell !== prevCell) {
+            changedValues++;
+            hasChangesInRow = true;
+          }
+        });
+
+        if (hasChangesInRow) {
+          updatedRows++;
+        }
+      });
+
+      stats.changedValues = changedValues;
+      stats.updatedRows = updatedRows;
 
       console.log('Refresh stats calculated:', {
-        totalGameTypes: gameTypeRows.length,
-        previousGameTypes: previousGameTypeRows.length,
-        newRows: stats.newRows,
+        totalRows: stats.totalRows,
+        changedValues: stats.changedValues,
         updatedRows: stats.updatedRows
       });
     } else {
-      // First time loading, all rows are new
-      stats.newRows = newData.filter(row => {
-        if (!row[0]) return false;
-        const firstCell = row[0].toString().trim();
-        return !firstCell.match(/^\d/) && firstCell !== '' && firstCell !== 'Game Type';
-      }).length;
+      console.log('No previous data, counting initial values...');
+      // First time loading, count all non-empty values
+      stats.changedValues = newData.reduce((count, row) => {
+        return count + row.filter(cell => cell !== '').length;
+      }, 0);
+      stats.updatedRows = newData.length;
+      console.log('Initial stats:', stats);
     }
 
-    // Update stored data
-    previousData = newData;
-    lastRefreshStats = stats;
-    refreshHistory.unshift(stats);
-    refreshHistory = refreshHistory.slice(0, 10); // Keep last 10 refreshes
+    // Update stored data in global scope
+    global._previousData = newData;
+    global._lastRefreshStats = stats;
+    global._refreshHistory.unshift(stats);
+    global._refreshHistory = global._refreshHistory.slice(0, 10); // Keep last 10 refreshes
 
     return {
       data: newData,
       stats,
-      history: refreshHistory
+      history: global._refreshHistory
     };
   } catch (error) {
     console.error('Error fetching spreadsheet data:', error);
@@ -130,8 +150,8 @@ export default async function handler(
     } else {
       // GET method to fetch last refresh stats and history
       res.status(200).json({
-        lastStats: lastRefreshStats,
-        history: refreshHistory
+        lastStats: global._lastRefreshStats,
+        history: global._refreshHistory
       });
     }
   } catch (error) {

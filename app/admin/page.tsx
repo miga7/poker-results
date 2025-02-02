@@ -3,13 +3,13 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Clock, Database, ArrowUpDown } from 'lucide-react';
+import { RefreshCw, Clock, Database, ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
 interface RefreshStats {
   timestamp: number;
   totalRows: number;
-  newRows: number;
+  changedValues: number;
   updatedRows: number;
   isAutomatic: boolean;
 }
@@ -22,6 +22,7 @@ interface RefreshHistory {
 export default function AdminPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshStats, setRefreshStats] = useState<RefreshHistory | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
   const { toast } = useToast();
 
   const fetchStats = async () => {
@@ -29,7 +30,12 @@ export default function AdminPage() {
       const response = await fetch('/api/refresh-data');
       if (response.ok) {
         const data = await response.json();
-        setRefreshStats(data);
+        if (!data.lastStats) {
+          // If no stats exist, trigger an initial refresh
+          await refreshData();
+        } else {
+          setRefreshStats(data);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch refresh stats:', error);
@@ -114,15 +120,15 @@ export default function AdminPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">New Rows</CardTitle>
+            <CardTitle className="text-sm font-medium">Changed Values</CardTitle>
             <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {refreshStats?.lastStats?.newRows || 0}
+              {refreshStats?.lastStats?.changedValues || 0}
             </div>
             <p className="text-xs text-muted-foreground">
-              New rows in last refresh
+              Values changed in last refresh
             </p>
           </CardContent>
         </Card>
@@ -163,31 +169,41 @@ export default function AdminPage() {
           </div>
 
           <div className="mt-8">
-            <h3 className="text-lg font-semibold mb-4">Refresh History</h3>
-            <div className="space-y-4">
-              {refreshStats?.history.map((stat, index) => (
-                <div
-                  key={stat.timestamp}
-                  className="flex items-center justify-between p-4 rounded-lg bg-muted"
-                >
-                  <div>
-                    <p className="font-medium">{formatDate(stat.timestamp)}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {stat.isAutomatic ? 'Automatic' : 'Manual'} refresh
-                    </p>
+            <Button
+              variant="outline"
+              onClick={() => setShowHistory(!showHistory)}
+              className="flex items-center gap-2 mb-4"
+            >
+              {showHistory ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              Refresh History
+            </Button>
+            
+            {showHistory && (
+              <div className="space-y-4">
+                {refreshStats?.history.map((stat, index) => (
+                  <div
+                    key={stat.timestamp}
+                    className="flex items-center justify-between p-4 rounded-lg bg-muted"
+                  >
+                    <div>
+                      <p className="font-medium">{formatDate(stat.timestamp)}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {stat.isAutomatic ? 'Automatic' : 'Manual'} refresh
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm">
+                        Total: <span className="font-medium">{stat.totalRows}</span>
+                      </p>
+                      <p className="text-sm">
+                        Changed: <span className="font-medium">{stat.changedValues}</span>,
+                        Updated: <span className="font-medium">{stat.updatedRows}</span>
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm">
-                      Total: <span className="font-medium">{stat.totalRows}</span>
-                    </p>
-                    <p className="text-sm">
-                      New: <span className="font-medium">{stat.newRows}</span>,
-                      Updated: <span className="font-medium">{stat.updatedRows}</span>
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
