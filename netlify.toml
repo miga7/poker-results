@@ -4,9 +4,14 @@
 
 [build.environment]
   NEXT_TELEMETRY_DISABLED = "1"
+  NEXT_BUNDLER = "webpack"
+  NODE_VERSION = "18"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+[functions]
+  included_files = ["node_modules/@netlify/plugin-nextjs/**"]
 
 [[redirects]]
   from = "/*"
