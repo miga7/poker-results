@@ -1,14 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { google } from 'googleapis';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { join } from 'path';
 import { schedule } from 'node-cron';
 
 // Initialize Google Sheets API
 const sheets = google.sheets('v4');
-
-// In-memory storage for refresh stats
-let lastRefreshStats: RefreshStats | null = null;
-let refreshHistory: RefreshStats[] = [];
-let previousData: any[][] | null = null;
 
 interface RefreshStats {
   timestamp: number;
@@ -16,6 +13,45 @@ interface RefreshStats {
   newRows: number;
   updatedRows: number;
   isAutomatic: boolean;
+}
+
+const STATS_FILE_PATH = join(process.cwd(), 'refresh-stats.json');
+
+// Initialize stats file if it doesn't exist
+if (!existsSync(STATS_FILE_PATH)) {
+  writeFileSync(STATS_FILE_PATH, JSON.stringify({
+    lastRefreshStats: null,
+    refreshHistory: [],
+    previousData: null
+  }), 'utf-8');
+}
+
+// Read stats from file
+function readStats() {
+  try {
+    const stats = JSON.parse(readFileSync(STATS_FILE_PATH, 'utf-8'));
+    return {
+      lastRefreshStats: stats.lastRefreshStats,
+      refreshHistory: stats.refreshHistory || [],
+      previousData: stats.previousData
+    };
+  } catch (error) {
+    console.error('Error reading stats file:', error);
+    return {
+      lastRefreshStats: null,
+      refreshHistory: [],
+      previousData: null
+    };
+  }
+}
+
+// Write stats to file
+function writeStats(stats: { lastRefreshStats: RefreshStats | null, refreshHistory: RefreshStats[], previousData: any[][] | null }) {
+  try {
+    writeFileSync(STATS_FILE_PATH, JSON.stringify(stats, null, 2), 'utf-8');
+  } catch (error) {
+    console.error('Error writing stats file:', error);
+  }
 }
 
 // Schedule data refresh every day at 5 AM
@@ -30,18 +66,22 @@ schedule('0 5 * * *', async () => {
 
 async function refreshSpreadsheetData(isAutomatic: boolean = false) {
   try {
+    // Read current stats
+    const { lastRefreshStats, refreshHistory, previousData: prevData } = readStats();
+
+    // Read credentials from file
+    const credentialsPath = join(process.cwd(), 'google-credentials.json');
+    const credentials = JSON.parse(readFileSync(credentialsPath, 'utf-8'));
+
     const auth = new google.auth.GoogleAuth({
-      credentials: {
-        client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      },
+      credentials,
       scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
     });
 
     const response = await sheets.spreadsheets.values.get({
       auth,
-      spreadsheetId: process.env.SHEET_ID,
-      range: process.env.SHEET_RANGE || 'Sheet1!A:N',
+      spreadsheetId: '1zBBY-hOcMrurb-EoTFGKNxaZnPMLLdfCwjRLt9JLEaM',
+      range: 'Totals 19-24!A1:N21',
     });
 
     const newData = response.data.values || [];
@@ -55,24 +95,19 @@ async function refreshSpreadsheetData(isAutomatic: boolean = false) {
       isAutomatic
     };
 
-    if (previousData) {
+    if (prevData) {
       // Find game type rows (rows that don't start with a number and aren't empty)
-      const gameTypeRows = newData.filter((row, index) => {
+      const gameTypeRows = newData.filter((row) => {
         if (!row[0]) return false;
         const firstCell = row[0].toString().trim();
-        return !firstCell.match(/^\d/) && firstCell !== '' && firstCell !== 'Game Type';
+        return firstCell.includes('Stakes') || firstCell.includes('Cash Games');
       });
 
-      const previousGameTypeRows = previousData.filter((row, index) => {
+      const previousGameTypeRows = prevData.filter((row) => {
         if (!row[0]) return false;
         const firstCell = row[0].toString().trim();
-        return !firstCell.match(/^\d/) && firstCell !== '' && firstCell !== 'Game Type';
+        return firstCell.includes('Stakes') || firstCell.includes('Cash Games');
       });
-
-      // Count new game types
-      stats.newRows = gameTypeRows.filter(row => 
-        !previousGameTypeRows.some(prevRow => prevRow[0] === row[0])
-      ).length;
 
       // Count updated rows (same game type but different values)
       stats.updatedRows = gameTypeRows.filter(row => {
@@ -83,28 +118,29 @@ async function refreshSpreadsheetData(isAutomatic: boolean = false) {
       console.log('Refresh stats calculated:', {
         totalGameTypes: gameTypeRows.length,
         previousGameTypes: previousGameTypeRows.length,
-        newRows: stats.newRows,
         updatedRows: stats.updatedRows
       });
     } else {
-      // First time loading, all rows are new
-      stats.newRows = newData.filter(row => {
+      // First time loading
+      stats.updatedRows = newData.filter(row => {
         if (!row[0]) return false;
         const firstCell = row[0].toString().trim();
-        return !firstCell.match(/^\d/) && firstCell !== '' && firstCell !== 'Game Type';
+        return firstCell.includes('Stakes') || firstCell.includes('Cash Games');
       }).length;
     }
 
     // Update stored data
-    previousData = newData;
-    lastRefreshStats = stats;
-    refreshHistory.unshift(stats);
-    refreshHistory = refreshHistory.slice(0, 10); // Keep last 10 refreshes
+    const updatedHistory = [stats, ...(refreshHistory || [])].slice(0, 10); // Keep last 10 refreshes
+    writeStats({
+      lastRefreshStats: stats,
+      refreshHistory: updatedHistory,
+      previousData: newData
+    });
 
     return {
       data: newData,
       stats,
-      history: refreshHistory
+      history: updatedHistory
     };
   } catch (error) {
     console.error('Error fetching spreadsheet data:', error);
@@ -129,6 +165,7 @@ export default async function handler(
       });
     } else {
       // GET method to fetch last refresh stats and history
+      const { lastRefreshStats, refreshHistory } = readStats();
       res.status(200).json({
         lastStats: lastRefreshStats,
         history: refreshHistory

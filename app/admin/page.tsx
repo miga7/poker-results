@@ -1,196 +1,143 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useTheme } from 'next-themes';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Clock, Database, ArrowUpDown } from 'lucide-react';
-import { useToast } from '@/components/ui/use-toast';
-
-interface RefreshStats {
-  timestamp: number;
-  totalRows: number;
-  newRows: number;
-  updatedRows: number;
-  isAutomatic: boolean;
-}
-
-interface RefreshHistory {
-  lastStats: RefreshStats | null;
-  history: RefreshStats[];
-}
+import { Moon, Sun, DollarSign, Bell, Eye, Languages } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function AdminPage() {
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [refreshStats, setRefreshStats] = useState<RefreshHistory | null>(null);
-  const { toast } = useToast();
-
-  const fetchStats = async () => {
-    try {
-      const response = await fetch('/api/refresh-data');
-      if (response.ok) {
-        const data = await response.json();
-        setRefreshStats(data);
-      }
-    } catch (error) {
-      console.error('Failed to fetch refresh stats:', error);
-    }
-  };
-
-  useEffect(() => {
-    fetchStats();
-  }, []);
-
-  const refreshData = async () => {
-    try {
-      setIsRefreshing(true);
-      const response = await fetch('/api/refresh-data', {
-        method: 'POST',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to refresh data');
-      }
-
-      const result = await response.json();
-      setRefreshStats({
-        lastStats: result.stats,
-        history: result.history
-      });
-
-      toast({
-        title: 'Success',
-        description: 'Data refreshed successfully',
-      });
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to refresh data. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleString('en-US', {
-      dateStyle: 'medium',
-      timeStyle: 'medium'
-    });
-  };
+  const { theme, setTheme } = useTheme();
 
   return (
     <div className="space-y-8">
-      <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-      
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <h1 className="text-3xl font-bold">Settings</h1>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Theme Settings */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Last Refresh</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sun className="h-5 w-5" /> Theme
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {refreshStats?.lastStats ? formatDate(refreshStats.lastStats.timestamp) : 'Never'}
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Choose Theme</span>
+              <div className="flex gap-2">
+                <Button
+                  variant={theme === 'light' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setTheme('light')}
+                  className="relative"
+                >
+                  <Sun className="h-4 w-4 mr-1" />
+                  Light
+                  {theme === 'light' && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full" />
+                  )}
+                </Button>
+                <Button
+                  variant={theme === 'dark' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setTheme('dark')}
+                  className="relative"
+                >
+                  <Moon className="h-4 w-4 mr-1" />
+                  Dark
+                  {theme === 'dark' && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full" />
+                  )}
+                </Button>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {refreshStats?.lastStats?.isAutomatic ? 'Automatic' : 'Manual'} refresh
-            </p>
           </CardContent>
         </Card>
+
+        {/* Currency Settings */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Rows</CardTitle>
-            <Database className="h-4 w-4 text-muted-foreground" />
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5" /> Currency Display
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {refreshStats?.lastStats?.totalRows || 0}
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Currency Symbol</span>
+              <Select defaultValue="₪">
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue placeholder="Select currency" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="₪">₪ (ILS)</SelectItem>
+                  <SelectItem value="$">$ (USD)</SelectItem>
+                  <SelectItem value="€">€ (EUR)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Total rows in spreadsheet
-            </p>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Show in Thousands (K)</span>
+              <Switch />
+            </div>
           </CardContent>
         </Card>
+
+        {/* Notification Settings */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">New Rows</CardTitle>
-            <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bell className="h-5 w-5" /> Notifications
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {refreshStats?.lastStats?.newRows || 0}
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Data Refresh Alerts</span>
+              <Switch defaultChecked />
             </div>
-            <p className="text-xs text-muted-foreground">
-              New rows in last refresh
-            </p>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Monthly Summary</span>
+              <Switch defaultChecked />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Profit/Loss Alerts</span>
+              <Switch />
+            </div>
           </CardContent>
         </Card>
+
+        {/* Display Settings */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Updated Rows</CardTitle>
-            <RefreshCw className="h-4 w-4 text-muted-foreground" />
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Eye className="h-5 w-5" /> Display
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {refreshStats?.lastStats?.updatedRows || 0}
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Default View</span>
+              <Select defaultValue="monthly">
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue placeholder="Select view" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="yearly">Yearly</SelectItem>
+                  <SelectItem value="all">All Time</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Updated rows in last refresh
-            </p>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Show Profit/Loss Colors</span>
+              <Switch defaultChecked />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Compact View</span>
+              <Switch />
+            </div>
           </CardContent>
         </Card>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Data Management</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <h3 className="text-lg font-semibold mb-2">Refresh Data</h3>
-            <p className="text-muted-foreground mb-4">
-              Manually refresh data from the spreadsheet. Data is automatically refreshed every day at 5 AM.
-            </p>
-            <Button
-              onClick={refreshData}
-              disabled={isRefreshing}
-              className="flex items-center gap-2"
-            >
-              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              {isRefreshing ? 'Refreshing...' : 'Refresh Now'}
-            </Button>
-          </div>
-
-          <div className="mt-8">
-            <h3 className="text-lg font-semibold mb-4">Refresh History</h3>
-            <div className="space-y-4">
-              {refreshStats?.history.map((stat, index) => (
-                <div
-                  key={stat.timestamp}
-                  className="flex items-center justify-between p-4 rounded-lg bg-muted"
-                >
-                  <div>
-                    <p className="font-medium">{formatDate(stat.timestamp)}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {stat.isAutomatic ? 'Automatic' : 'Manual'} refresh
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm">
-                      Total: <span className="font-medium">{stat.totalRows}</span>
-                    </p>
-                    <p className="text-sm">
-                      New: <span className="font-medium">{stat.newRows}</span>,
-                      Updated: <span className="font-medium">{stat.updatedRows}</span>
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 } 

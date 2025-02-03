@@ -36,5 +36,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# google credentials
+# IDE
+.idea/
+.vscode/
+
+# Project specific
 google-credentials.json
+refresh-stats.json

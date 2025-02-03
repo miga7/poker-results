@@ -6,6 +6,8 @@ import {
   LayoutDashboard,
   Settings,
   RefreshCw,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -24,6 +26,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const { toast } = useToast();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isAdminOpen, setIsAdminOpen] = useState(false);
 
   const refreshData = async () => {
     try {
@@ -60,17 +63,66 @@ export function Sidebar() {
     {
       title: 'Admin',
       icon: Settings,
-      href: '/admin',
+      onClick: () => setIsAdminOpen(!isAdminOpen),
       subItems: [
+        {
+          title: 'Settings',
+          icon: Settings,
+          href: '/admin',
+        },
         {
           title: 'Refresh Data',
           icon: RefreshCw,
-          onClick: refreshData,
-          loading: isRefreshing,
+          href: '/refresh',
         },
       ],
     },
   ];
+
+  const renderMenuItem = (item: any) => (
+    <div key={item.title}>
+      <Button
+        variant={pathname === item.href ? 'secondary' : 'ghost'}
+        className={cn(
+          'w-full justify-between gap-2',
+          pathname === item.href && 'bg-muted'
+        )}
+        onClick={() => {
+          if (item.href) {
+            router.push(item.href);
+          } else if (item.subItems) {
+            setIsAdminOpen(!isAdminOpen);
+          }
+        }}
+      >
+        <div className="flex items-center gap-2">
+          <item.icon className="h-4 w-4" />
+          {item.title}
+        </div>
+        {item.subItems && (
+          isAdminOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
+        )}
+      </Button>
+      {item.subItems && isAdminOpen && (
+        <div className="ml-4 mt-2 space-y-2">
+          {item.subItems.map((subItem: any) => (
+            <Button
+              key={subItem.title}
+              variant="ghost"
+              className={cn(
+                'w-full justify-start gap-2',
+                pathname === subItem.href && 'bg-muted'
+              )}
+              onClick={() => subItem.href && router.push(subItem.href)}
+            >
+              <subItem.icon className="h-4 w-4" />
+              {subItem.title}
+            </Button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <Sheet>
@@ -86,40 +138,7 @@ export function Sidebar() {
           </SheetHeader>
           <Separator />
           <nav className="flex-1 space-y-2 p-4">
-            {menuItems.map((item) => (
-              <div key={item.title}>
-                <Button
-                  variant={pathname === item.href ? 'secondary' : 'ghost'}
-                  className={cn(
-                    'w-full justify-start gap-2',
-                    pathname === item.href && 'bg-muted'
-                  )}
-                  onClick={() => item.href && router.push(item.href)}
-                >
-                  <item.icon className="h-4 w-4" />
-                  {item.title}
-                </Button>
-                {item.subItems && (
-                  <div className="ml-4 mt-2 space-y-2">
-                    {item.subItems.map((subItem) => (
-                      <Button
-                        key={subItem.title}
-                        variant="ghost"
-                        className="w-full justify-start gap-2"
-                        onClick={subItem.onClick}
-                        disabled={subItem.loading}
-                      >
-                        <subItem.icon className={cn(
-                          "h-4 w-4",
-                          subItem.loading && "animate-spin"
-                        )} />
-                        {subItem.title}
-                      </Button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+            {menuItems.map(renderMenuItem)}
           </nav>
         </div>
       </div>
@@ -129,40 +148,7 @@ export function Sidebar() {
         </SheetHeader>
         <Separator className="my-4" />
         <nav className="flex-1 space-y-2">
-          {menuItems.map((item) => (
-            <div key={item.title}>
-              <Button
-                variant={pathname === item.href ? 'secondary' : 'ghost'}
-                className={cn(
-                  'w-full justify-start gap-2',
-                  pathname === item.href && 'bg-muted'
-                )}
-                onClick={() => item.href && router.push(item.href)}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.title}
-              </Button>
-              {item.subItems && (
-                <div className="ml-4 mt-2 space-y-2">
-                  {item.subItems.map((subItem) => (
-                    <Button
-                      key={subItem.title}
-                      variant="ghost"
-                      className="w-full justify-start gap-2"
-                      onClick={subItem.onClick}
-                      disabled={subItem.loading}
-                    >
-                      <subItem.icon className={cn(
-                        "h-4 w-4",
-                        subItem.loading && "animate-spin"
-                      )} />
-                      {subItem.title}
-                    </Button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+          {menuItems.map(renderMenuItem)}
         </nav>
       </SheetContent>
     </Sheet>

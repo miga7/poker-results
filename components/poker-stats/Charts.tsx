@@ -708,15 +708,18 @@ export function PokerStatsCharts({ data }: { data: PokerStatsData }) {
                       iconType="circle"
                       iconSize={8}
                     />
-                    {chartGameTypes.map(gameType => (
-                      <Bar
-                        key={gameType}
-                        dataKey={gameType}
-                        name={gameType === 'Totals' ? 'Totals' : getGameCategory(gameType)}
-                        fill={getGameColor(gameType)}
-                        radius={[4, 4, 0, 0]}
-                        maxBarSize={50}
-                      />
+                    {chartGameTypes
+                      .filter(gameType => gameType !== 'Totals') // Exclude Totals from stacked bars
+                      .map(gameType => (
+                        <Bar
+                          key={gameType}
+                          dataKey={gameType}
+                          name={getGameCategory(gameType)}
+                          fill={getGameColor(gameType)}
+                          stackId="stack"
+                          radius={[4, 4, 0, 0]}
+                          maxBarSize={50}
+                        />
                     ))}
                   </BarChart>
                 </ResponsiveContainer>
